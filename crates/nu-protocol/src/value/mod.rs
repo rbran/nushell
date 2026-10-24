@@ -18,6 +18,7 @@ pub use filesize::*;
 pub use from_value::FromValue;
 pub use glob::*;
 pub use into_value::{IntoValue, TryIntoValue};
+use nu_ansi_term::Style;
 pub use nu_utils::MultiLife;
 pub use range::{FloatRange, IntRange, ParseRangeError, Range};
 pub use record::Record;
@@ -105,6 +106,9 @@ pub enum Value {
     #[non_exhaustive]
     String {
         val: String,
+        /// parts of the value that should be highlighted
+        #[serde(default)]
+        highlights: Vec<ValueHighlight>,
         /// note: spans are being refactored out of Value
         /// please use .span() instead of matching this span value
         #[serde(rename = "span")]
@@ -221,6 +225,12 @@ pub enum Value {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValueHighlight {
+    range: std::ops::Range<usize>,
+    style: Style,
+}
+
 fn wrap_tuple(name: &str, val: impl Debug) -> impl Debug {
     fmt::from_fn(move |f| {
         write!(f, "{name}(")?;
@@ -252,10 +262,15 @@ impl Debug for Value {
                     .field("val", val)
                     .field("internal_span", internal_span)
                     .finish(),
-                Self::String { val, internal_span } => f
+                Self::String {
+                    val,
+                    internal_span,
+                    highlights,
+                } => f
                     .debug_struct("String")
                     .field("val", val)
                     .field("internal_span", internal_span)
+                    .field("highlights", highlights)
                     .finish(),
                 Self::Glob {
                     val,
@@ -383,7 +398,7 @@ impl Debug for Value {
 // This is to document/enforce the size of `Value` in bytes.
 // We should try to avoid increasing the size of `Value`,
 // and PRs that do so will have to change the number below so that it's noted in review.
-const _: () = assert!(std::mem::size_of::<Value>() <= 56);
+const _: () = assert!(std::mem::size_of::<Value>() <= 72);
 
 impl Clone for Value {
     fn clone(&self) -> Self {
@@ -412,9 +427,14 @@ impl Clone for Value {
                 internal_span: *internal_span,
             },
             Value::Float { val, internal_span } => Value::float(*val, *internal_span),
-            Value::String { val, internal_span } => Value::String {
+            Value::String {
+                val,
+                internal_span,
+                highlights,
+            } => Value::String {
                 val: val.clone(),
                 internal_span: *internal_span,
+                highlights: highlights.clone(),
             },
             Value::Glob {
                 val,
@@ -1947,6 +1967,19 @@ impl Value {
         Value::String {
             val: val.into(),
             internal_span: span,
+            highlights: vec![],
+        }
+    }
+
+    pub fn string_with_highlights(
+        val: impl Into<String>,
+        highlights: Vec<ValueHighlight>,
+        span: Span,
+    ) -> Value {
+        Value::String {
+            val: val.into(),
+            internal_span: span,
+            highlights,
         }
     }
 
@@ -2066,6 +2099,15 @@ impl Value {
     /// when used in errors.
     pub fn test_string(val: impl Into<String>) -> Value {
         Value::string(val, Span::test_data())
+    }
+
+    /// Note: Only use this for test data, *not* live data, as it will point into unknown source
+    /// when used in errors.
+    pub fn test_string_with_highlights(
+        val: impl Into<String>,
+        highlights: Vec<ValueHighlight>,
+    ) -> Value {
+        Value::string_with_highlights(val, highlights, Span::test_data())
     }
 
     /// Note: Only use this for test data, *not* live data, as it will point into unknown source
@@ -4479,6 +4521,60 @@ impl Value {
                 rhs,
                 |val| matches!(val, Value::Bool { .. }),
             )),
+        }
+    }
+}
+
+impl ValueHighlight {
+    pub fn new(range: std::ops::Range<usize>, style: Style) -> Self {
+        Self { range, style }
+    }
+
+    pub fn range(&self) -> &std::ops::Range<usize> {
+        &self.range
+    }
+    pub fn style(&self) -> Style {
+        self.style
+    }
+
+    /// Paints `highlights` into `text`, applying `base` to the unhighlighted
+    /// segments. Each segment is emitted as a self-contained ANSI run so that
+    /// nested resets don't leak the base style.
+    pub fn paint_highlights(
+        text: &str,
+        highlights: &[ValueHighlight],
+        base: Option<Style>,
+    ) -> String {
+        if highlights.is_empty() {
+            return match base {
+                Some(style) => style.paint(text).to_string(),
+                None => text.to_owned(),
+            };
+        }
+
+        let mut out = String::with_capacity(text.len() + highlights.len() * 16);
+        let mut cursor = 0;
+        for hl in highlights {
+            let range = hl.range();
+            if range.start < cursor || range.end > text.len() {
+                continue; // stale/overlapping range: skip rather than panic
+            }
+            if cursor < range.start {
+                out.push_str(&Self::paint_segment(&text[cursor..range.start], base));
+            }
+            out.push_str(&hl.style().paint(&text[range.clone()]).to_string());
+            cursor = range.end;
+        }
+        if cursor < text.len() {
+            out.push_str(&Self::paint_segment(&text[cursor..], base));
+        }
+        out
+    }
+
+    fn paint_segment(s: &str, base: Option<Style>) -> String {
+        match base {
+            Some(style) => style.paint(s).to_string(),
+            None => s.to_owned(),
         }
     }
 }

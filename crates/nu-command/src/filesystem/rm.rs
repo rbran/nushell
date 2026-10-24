@@ -166,8 +166,7 @@ fn rm(
         {
             unique_argument_check = Some(path.span);
         }
-        let corrected_path = path.map(NuGlob::strip_ansi_string_unlikely);
-        let _ = std::mem::replace(&mut paths[idx], corrected_path);
+        let _ = std::mem::replace(&mut paths[idx], path);
     }
 
     let span = call.head;

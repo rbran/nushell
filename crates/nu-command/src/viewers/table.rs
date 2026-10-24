@@ -16,7 +16,7 @@ use nu_path::form::Absolute;
 use nu_pretty_hex::{HexConfig, HexStyles};
 use nu_protocol::{
     ByteStream, Config, DataSource, ListStream, PipelineMetadata, Signals,
-    TABLE_WIDTH_PRIORITY_COLUMNS_METADATA_KEY, TableMode, ValueIterator,
+    TABLE_WIDTH_PRIORITY_COLUMNS_METADATA_KEY, TableMode, ValueHighlight, ValueIterator,
     shell_error::{bridge::ShellErrorBridge, io::IoError},
 };
 use nu_table::{
@@ -787,9 +787,10 @@ fn handle_row_stream(
                                 },
                                 Err(_) => nu_ansi_term::Style::default(),
                             };
-                            *rec_val = Value::string(
+                            *rec_val = Value::string_with_highlights(
+                                val.to_string(),
                                 // Apply the style (ANSI codes) to the string
-                                s.paint(&*val).to_string(),
+                                vec![ValueHighlight::new(0..val.len(), s)],
                                 span,
                             );
                         }
@@ -1202,17 +1203,26 @@ fn render_path_name(
         show_clickable_links,
     );
 
-    let val = if icons {
-        format!(
-            "{}  {}",
-            icon_style.paint(String::from(file_icon.icon)),
-            ansi_style.paint(full_path_link)
-        )
+    if icons {
+        let icon = String::from(file_icon.icon);
+        let val = format!("{icon}  {full_path_link}");
+        let val_len = val.len();
+        Some(Value::string_with_highlights(
+            val,
+            vec![
+                ValueHighlight::new(0..icon.len(), icon_style),
+                ValueHighlight::new(icon.len()..val_len, ansi_style),
+            ],
+            span,
+        ))
     } else {
-        ansi_style.paint(full_path_link).to_string()
-    };
-
-    Some(Value::string(val, span))
+        let len = full_path_link.len();
+        Some(Value::string_with_highlights(
+            full_path_link,
+            vec![ValueHighlight::new(0..len, ansi_style)],
+            span,
+        ))
+    }
 }
 
 fn maybe_strip_color(output: String, use_ansi_coloring: bool) -> String {

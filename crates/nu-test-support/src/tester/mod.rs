@@ -478,6 +478,8 @@ impl NuTester {
     /// Parsing, compilation, or evaluation failures are returned as [`TestError`].
     #[track_caller]
     pub fn run<T: FromValue>(&mut self, code: impl AsRef<str>) -> Result<T> {
+        // TODO Value::string_with_highlights don't compare the highlight
+        // just the value
         Self::extract_value(self.run_raw(code)?)
     }
 

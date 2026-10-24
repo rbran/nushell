@@ -2,7 +2,7 @@ use fancy_regex::{Regex, escape};
 use nu_ansi_term::Style;
 use nu_color_config::StyleComputer;
 use nu_engine::command_prelude::*;
-use nu_protocol::Config;
+use nu_protocol::{Config, ValueHighlight};
 
 #[derive(Clone)]
 pub struct Find;
@@ -341,9 +341,6 @@ struct MatchPattern {
     /// search from the end (find last occurrence)
     rfind: bool,
 
-    /// style of the non-highlighted string sections
-    string_style: Style,
-
     /// style of the highlighted string sections
     highlight_style: Style,
 }
@@ -381,9 +378,6 @@ fn get_match_pattern_from_arguments(
 
     let style_computer = StyleComputer::from_config(engine_state, stack);
     // Currently, search results all use the same style.
-    // Also note that this sample string is passed into user-written code (the closure that may or may not be
-    // defined for "string").
-    let string_style = style_computer.compute("string", &Value::string("search result", span));
     let highlight_style =
         style_computer.compute("search_result", &Value::string("search result", span));
 
@@ -452,79 +446,58 @@ fn get_match_pattern_from_arguments(
         only_matching,
         highlight,
         rfind,
-        string_style,
         highlight_style,
     })
 }
 
 // map functions
 
-fn highlight_matches_in_string(pattern: &MatchPattern, val: String) -> String {
-    if !pattern.regex.is_match(&val).unwrap_or(false) {
-        return val;
+fn highlight_matches_in_string(
+    pattern: &MatchPattern,
+    val: &str,
+    highlights: Vec<ValueHighlight>,
+) -> Vec<ValueHighlight> {
+    if !pattern.regex.is_match(val).unwrap_or(false) {
+        return highlights;
     }
 
-    let stripped_val = nu_utils::strip_ansi_string_unlikely(val);
-
     if pattern.rfind {
-        highlight_last_match(pattern, &stripped_val)
+        highlight_last_match(pattern, val, highlights)
     } else {
-        highlight_all_matches(pattern, &stripped_val)
+        highlight_all_matches(pattern, val, highlights)
     }
 }
 
-fn highlight_last_match(pattern: &MatchPattern, text: &str) -> String {
+fn highlight_last_match(
+    pattern: &MatchPattern,
+    text: &str,
+    mut highlights: Vec<ValueHighlight>,
+) -> Vec<ValueHighlight> {
     // Find the last match using fold to avoid collecting all matches
     let last_match = pattern.regex.find_iter(text).fold(None, |_, m| m.ok());
 
-    match last_match {
-        Some(m) => {
-            let start = m.start();
-            let end = m.end();
-            format!(
-                "{}{}{}",
-                pattern.string_style.paint(&text[..start]),
-                pattern.highlight_style.paint(&text[start..end]),
-                pattern.string_style.paint(&text[end..])
-            )
-        }
-        None => pattern.string_style.paint(text).to_string(),
+    if let Some(m) = last_match {
+        highlights.push(ValueHighlight::new(m.range(), pattern.highlight_style));
     }
+    highlights
 }
 
-fn highlight_all_matches(pattern: &MatchPattern, text: &str) -> String {
-    let mut last_match_end = 0;
-    let mut highlighted = String::new();
-
+fn highlight_all_matches(
+    pattern: &MatchPattern,
+    text: &str,
+    mut highlights: Vec<ValueHighlight>,
+) -> Vec<ValueHighlight> {
     for cap in pattern.regex.captures_iter(text) {
         let Ok(capture) = cap else {
-            return pattern.string_style.paint(text).to_string();
+            return highlights;
         };
 
         let Some(m) = capture.get(0) else { continue };
 
-        highlighted.push_str(
-            &pattern
-                .string_style
-                .paint(&text[last_match_end..m.start()])
-                .to_string(),
-        );
-        highlighted.push_str(
-            &pattern
-                .highlight_style
-                .paint(&text[m.start()..m.end()])
-                .to_string(),
-        );
-        last_match_end = m.end();
+        highlights.push(ValueHighlight::new(m.range(), pattern.highlight_style));
     }
 
-    highlighted.push_str(
-        &pattern
-            .string_style
-            .paint(&text[last_match_end..])
-            .to_string(),
-    );
-    highlighted
+    highlights
 }
 
 fn highlight_matches_in_value(
@@ -559,7 +532,12 @@ fn highlight_matches_in_value(
             .map(|item| highlight_matches_in_value(pattern, item, &[]))
             .collect::<Vec<Value>>()
             .into_value(span),
-        Value::String { val, .. } => highlight_matches_in_string(pattern, val).into_value(span),
+        Value::String {
+            val, highlights, ..
+        } => {
+            let highlights = highlight_matches_in_string(pattern, &val, highlights);
+            Value::string_with_highlights(val, highlights, span)
+        }
         _ => value,
     }
 }
@@ -619,10 +597,10 @@ fn find_in_pipelinedata(
                     let line = line?;
                     if string_should_be_printed(&pattern, &line) != pattern.invert {
                         if pattern.highlight && !pattern.invert {
-                            output
-                                .push(highlight_matches_in_string(&pattern, line).into_value(span))
+                            let highlights = highlight_matches_in_string(&pattern, &line, vec![]);
+                            output.push(Value::string_with_highlights(line, highlights, span))
                         } else {
-                            output.push(line.into_value(span))
+                            output.push(Value::string_with_highlights(line, vec![], span))
                         }
                     }
                 }
@@ -863,7 +841,6 @@ pub fn find_internal(
     let span = input.span().unwrap_or(head);
 
     let style_computer = StyleComputer::from_config(engine_state, stack);
-    let string_style = style_computer.compute("string", &Value::string("search result", span));
     let highlight_style =
         style_computer.compute("search_result", &Value::string("search result", span));
 
@@ -879,7 +856,6 @@ pub fn find_internal(
         invert: false,
         only_matching: false,
         rfind: false,
-        string_style,
         highlight_style,
     };
 
@@ -897,6 +873,7 @@ mod tests {
 
     #[test]
     fn test_examples() -> nu_test_support::Result {
+        // TODO examples test don't check if the value is highlighted correctly
         nu_test_support::test().examples(Find)
     }
 
@@ -910,7 +887,6 @@ mod tests {
             invert: false,
             only_matching: true,
             rfind: false,
-            string_style: Style::new(),
             highlight_style: Style::new(),
         };
         let error = Value::error(
@@ -938,7 +914,6 @@ mod tests {
             invert: false,
             only_matching: true,
             rfind: false,
-            string_style: Style::new(),
             highlight_style: Style::new(),
         };
 
@@ -962,7 +937,6 @@ mod tests {
             invert: false,
             only_matching: true,
             rfind: false,
-            string_style: Style::new(),
             highlight_style: Style::new(),
         };
 
@@ -988,7 +962,6 @@ mod tests {
             invert: false,
             only_matching: true,
             rfind: false,
-            string_style: Style::new(),
             highlight_style: Style::new(),
         };
 

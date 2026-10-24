@@ -37,9 +37,7 @@ impl Command for Cd {
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
         let physical = call.has_flag(engine_state, stack, "physical")?;
-        let path_val = call
-            .opt::<Spanned<String>>(engine_state, stack, 0)?
-            .map(|p| p.map(nu_utils::strip_ansi_string_unlikely));
+        let path_val = call.opt::<Spanned<String>>(engine_state, stack, 0)?;
 
         // If getting PWD failed, default to the home directory. The user can
         // use `cd` to reset PWD to a good state.

@@ -364,22 +364,17 @@ fn ls_for_one_pattern(
         use_threads,
         call_span,
     } = args;
-    let pattern_arg = {
-        if let Some(path) = pattern_arg {
-            // it makes no sense to list an empty string.
-            if path.item.as_ref().is_empty() {
-                return Err(ShellError::Io(IoError::new_with_additional_context(
-                    shell_error::io::ErrorKind::from_std(std::io::ErrorKind::NotFound),
-                    path.span,
-                    PathBuf::from(path.item.to_string()),
-                    "empty string('') directory or file does not exist",
-                )));
-            }
-            Some(path.map(NuGlob::strip_ansi_string_unlikely))
-        } else {
-            pattern_arg
+    if let Some(path) = &pattern_arg {
+        // it makes no sense to list an empty string.
+        if path.item.as_ref().is_empty() {
+            return Err(ShellError::Io(IoError::new_with_additional_context(
+                shell_error::io::ErrorKind::from_std(std::io::ErrorKind::NotFound),
+                path.span,
+                PathBuf::from(path.item.to_string()),
+                "empty string('') directory or file does not exist",
+            )));
         }
-    };
+    }
 
     let mut just_read_dir = false;
     let p_tag: Span = pattern_arg.as_ref().map(|p| p.span).unwrap_or(call_span);

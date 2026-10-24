@@ -168,8 +168,7 @@ impl Command for UMv {
             };
             Some(glob_options)
         };
-        for mut p in paths {
-            p.item = p.item.strip_ansi_string_unlikely();
+        for p in paths {
             let exp_files: Vec<Result<PathBuf, ShellError>> = nu_engine::glob_from(
                 &p,
                 &cwd,
@@ -207,7 +206,7 @@ impl Command for UMv {
 
         // Add back the target after globbing
         let abs_target_path = expand_path_with(
-            nu_utils::strip_ansi_string_unlikely(spanned_target.item.to_string()),
+            spanned_target.item.to_string(),
             &cwd,
             matches!(spanned_target.item, NuGlob::Expand(..)),
         );

@@ -1,7 +1,10 @@
 use chrono::{Datelike, Local, NaiveDate};
 use nu_color_config::StyleComputer;
 use nu_engine::command_prelude::*;
-use nu_protocol::ast::{self, Expr, Expression};
+use nu_protocol::{
+    ValueHighlight,
+    ast::{self, Expr, Expression},
+};
 
 use std::collections::VecDeque;
 
@@ -373,10 +376,14 @@ fn add_month_to_table(
                     // This colors the current day
                     let header_style = style_computer.compute("header", &Value::nothing(tag));
 
-                    value = Value::string(
-                        header_style
-                            .paint(adjusted_day_number.to_string())
-                            .to_string(),
+                    let adjusted_day_number_str = adjusted_day_number.to_string();
+                    let adjusted_day_number_str_len = adjusted_day_number_str.len();
+                    value = Value::string_with_highlights(
+                        adjusted_day_number_str,
+                        vec![ValueHighlight::new(
+                            0..adjusted_day_number_str_len,
+                            header_style,
+                        )],
                         tag,
                     );
                 }

@@ -32,6 +32,7 @@ nu-utils.workspace = true
 nu-experimental.workspace = true
 nu-config.workspace = true
 
+nu-ansi-term = { workspace = true, features = ["derive_serde_style"] }
 brotli = { workspace = true, optional = true }
 bstr = { workspace = true }
 bytes = { workspace = true }

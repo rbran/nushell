@@ -4,8 +4,7 @@ use crate::{
 };
 use nu_color_config::{Alignment, StyleComputer, TextStyle};
 use nu_protocol::{
-    Config, FooterMode, ShellError, Span, TableMode, TrimStrategy, Value,
-    shell_error::generic::GenericError,
+    Config, FooterMode, ShellError, Span, TableMode, TrimStrategy, Value, ValueHighlight, shell_error::generic::GenericError,
 };
 use nu_utils::terminal_size;
 
@@ -53,7 +52,11 @@ pub fn nu_value_to_string_colored(val: &Value, cfg: &Config, comp: &StyleCompute
         text = clean_charset(&text);
     }
 
-    if let Some(color) = style.color_style {
+    if let Value::String { highlights, .. } = val
+        && !highlights.is_empty()
+    {
+        // already painted by nu_value_to_string; don't wrap again
+    } else if let Some(color) = style.color_style {
         text = color.paint(text).to_string();
     }
 
@@ -67,7 +70,14 @@ pub fn nu_value_to_string_colored(val: &Value, cfg: &Config, comp: &StyleCompute
 pub fn nu_value_to_string(val: &Value, cfg: &Config, style: &StyleComputer) -> NuText {
     let float_precision = cfg.float_precision as usize;
     let text = val.to_abbreviated_string(cfg);
-    make_styled_value(text, val, float_precision, style)
+    let (text, style) = make_styled_value(text, val, float_precision, style);
+    let text = match val {
+        Value::String { highlights, .. } if !highlights.is_empty() => {
+            ValueHighlight::paint_highlights(&text, highlights, style.color_style)
+        }
+        _ => text,
+    };
+    (text, style)
 }
 
 // todo: Expose a method which returns just style
@@ -141,7 +151,7 @@ pub fn get_leading_trailing_space_style(style_computer: &StyleComputer) -> TextS
 }
 
 pub fn get_value_style(value: &Value, config: &Config, style_computer: &StyleComputer) -> NuText {
-    match value {
+    let (text, style) = match value {
         // Float precision is required here.
         Value::Float { val, .. } => (
             format!("{:.prec$}", val, prec = config.float_precision as usize),
@@ -151,7 +161,14 @@ pub fn get_value_style(value: &Value, config: &Config, style_computer: &StyleCom
             value.to_abbreviated_string(config),
             style_computer.style_primitive(value),
         ),
-    }
+    };
+    let text = match value {
+        Value::String { highlights, .. } if !highlights.is_empty() => {
+            ValueHighlight::paint_highlights(&text, highlights, style.color_style)
+        }
+        _ => text,
+    };
+    (text, style)
 }
 
 fn make_styled_value(

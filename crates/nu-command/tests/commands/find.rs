@@ -1,10 +1,15 @@
+use nu_ansi_term::Style;
+use nu_protocol::ValueHighlight;
 use nu_test_support::{fs::Stub::FileWithContent, prelude::*};
 use rstest::rstest;
 
 #[rstest]
 #[case::highlighted(
     "moe",
-    "\u{1b}[39m\u{1b}[0m\u{1b}[41;39mmoe\u{1b}[0m\u{1b}[39m\u{1b}[0m"
+    Value::test_string_with_highlights(
+        "moe",
+        vec![ValueHighlight::new(0..3, Style::default().bold())],
+    ),
 )]
 #[case::plain("--no-highlight moe", "moe")]
 fn find_with_list_search_with_string(
@@ -19,8 +24,14 @@ fn find_with_list_search_with_string(
 #[case::highlighted(
     "l",
     [
-        "\u{1b}[39m\u{1b}[0m\u{1b}[41;39ml\u{1b}[0m\u{1b}[39marry\u{1b}[0m",
-        "\u{1b}[39mcur\u{1b}[0m\u{1b}[41;39ml\u{1b}[0m\u{1b}[39my\u{1b}[0m",
+        Value::test_string_with_highlights(
+            "larry",
+            vec![ValueHighlight::new(0..4, Style::default().bold())],
+        ),
+        Value::test_string_with_highlights(
+            "curly",
+            vec![ValueHighlight::new(0..5, Style::default().bold())],
+        ),
     ]
 )]
 #[case::plain("--no-highlight l", ["larry", "curly"])]
@@ -35,7 +46,10 @@ fn find_with_list_search_with_char(
 #[rstest]
 #[case::highlighted(
     "-i abc",
-    "\u{1b}[39m\u{1b}[0m\u{1b}[41;39mABC\u{1b}[0m\u{1b}[39m\u{1b}[0m"
+    Value::test_string_with_highlights(
+        "ABC",
+        vec![ValueHighlight::new(0..3, Style::default().bold())],
+    ),
 )]
 #[case::plain("-i --no-highlight abc", "ABC")]
 fn find_with_bytestream_search_with_char(
@@ -63,7 +77,10 @@ fn find_with_list_search_with_number(
 #[rstest]
 #[case::highlighted(
     "toml",
-    "\u{1b}[39mCargo.\u{1b}[0m\u{1b}[41;39mtoml\u{1b}[0m\u{1b}[39m\u{1b}[0m"
+    Value::test_string_with_highlights(
+        "Cargo.toml",
+        vec![ValueHighlight::new(6..10, Style::default().bold())],
+    ),
 )]
 #[case::plain("--no-highlight toml", "Cargo.toml")]
 fn find_with_string_search_with_string(
@@ -88,7 +105,10 @@ fn find_with_string_search_with_string_not_found(
 #[rstest]
 #[case::highlighted(
     "arep",
-    ["\u{1b}[39m\u{1b}[0m\u{1b}[41;39marep\u{1b}[0m\u{1b}[39mas.clu\u{1b}[0m"]
+    Value::test_string_with_highlights(
+        "arepas.clu",
+        vec![ValueHighlight::new(0..4, Style::default().bold())],
+    ),
 )]
 #[case::plain("--no-highlight arep", ["arepas.clu"])]
 fn find_with_filepath_search_with_string(
@@ -103,8 +123,14 @@ fn find_with_filepath_search_with_string(
 #[case::highlighted(
     "arep ami",
     [
-        "\u{1b}[39m\u{1b}[0m\u{1b}[41;39mami\u{1b}[0m\u{1b}[39mgos.txt\u{1b}[0m",
-        "\u{1b}[39m\u{1b}[0m\u{1b}[41;39marep\u{1b}[0m\u{1b}[39mas.clu\u{1b}[0m",
+        Value::test_string_with_highlights(
+            "amigos.txt",
+            vec![ValueHighlight::new(0..3, Style::default().bold())],
+        ),
+        Value::test_string_with_highlights(
+            "arepas.clu",
+            vec![ValueHighlight::new(0..4, Style::default().bold())],
+        ),
     ]
 )]
 #[case::plain("--no-highlight arep ami", ["amigos.txt", "arepas.clu"])]
@@ -131,8 +157,14 @@ fn find_takes_into_account_linebreaks_in_string(
 #[case::highlighted(
     "--regex ce",
     [
-        "\u{1b}[39mMauri\u{1b}[0m\u{1b}[41;39mce\u{1b}[0m\u{1b}[39m\u{1b}[0m",
-        "\u{1b}[39mLauren\u{1b}[0m\u{1b}[41;39mce\u{1b}[0m\u{1b}[39m\u{1b}[0m",
+        Value::test_string_with_highlights(
+            "Maurice",
+            vec![ValueHighlight::new(5..7, Style::default().bold())],
+        ),
+        Value::test_string_with_highlights(
+            "Laurence",
+            vec![ValueHighlight::new(6..8, Style::default().bold())],
+        ),
     ]
 )]
 #[case::plain(
@@ -207,7 +239,14 @@ fn inverted_find_in_table_keeps_row_if_none_of_the_selected_columns_matches(
     "Maurice",
     test_table![
         ["name", "nickname", "Age"];
-        ["\u{1b}[39m\u{1b}[0m\u{1b}[41;39mMaurice\u{1b}[0m\u{1b}[39m\u{1b}[0m", "moe", 23],
+        [
+            Value::test_string_with_highlights(
+                "Maurice",
+                vec![ValueHighlight::new(0..7, Style::default().bold())],
+            ),
+            "moe",
+            23,
+        ],
     ]
 )]
 #[case::plain(
@@ -232,9 +271,30 @@ fn find_in_table_keeps_row_with_single_matched_and_keeps_other_columns(
     "moe William",
     test_table![
         ["name", "nickname", "Age"];
-        ["Maurice", "\u{1b}[39m\u{1b}[0m\u{1b}[41;39mmoe\u{1b}[0m\u{1b}[39m\u{1b}[0m", 23],
-        ["\u{1b}[39m\u{1b}[0m\u{1b}[41;39mWilliam\u{1b}[0m\u{1b}[39m\u{1b}[0m", "will", 18],
-        ["\u{1b}[39m\u{1b}[0m\u{1b}[41;39mWilliam\u{1b}[0m\u{1b}[39m\u{1b}[0m", "bill", 60],
+        [
+            "Maurice",
+            Value::test_string_with_highlights(
+                "moe",
+                vec![ValueHighlight::new(0..3, Style::default().bold())],
+            ),
+            23,
+        ],
+        [
+            Value::test_string_with_highlights(
+                "William",
+                vec![ValueHighlight::new(0..7, Style::default().bold())],
+            ),
+            "will",
+            18,
+        ],
+        [
+            Value::test_string_with_highlights(
+                "William",
+                vec![ValueHighlight::new(0..7, Style::default().bold())],
+            ),
+            "bill",
+            60,
+        ],
     ]
 )]
 #[case::plain(
@@ -261,7 +321,10 @@ fn find_in_table_keeps_row_with_multiple_matched_and_keeps_other_columns(
     "'?'",
     test_table![
         ["d"];
-        ["\u{1b}[39ma\u{1b}[0m\u{1b}[41;39m?\u{1b}[0m\u{1b}[39mb\u{1b}[0m"],
+        [Value::test_string_with_highlights(
+            "?",
+            vec![ValueHighlight::new(0..1, Style::default().bold())],
+        )],
     ]
 )]
 #[case::plain(
@@ -281,7 +344,10 @@ fn find_with_string_search_with_special_char_1(
     "'*'",
     test_table![
         ["d"];
-        ["\u{1b}[39ma\u{1b}[0m\u{1b}[41;39m*\u{1b}[0m\u{1b}[39mb\u{1b}[0m"],
+        [Value::test_string_with_highlights(
+            "a*b",
+            vec![ValueHighlight::new(1..2, Style::default().bold())],
+        )],
     ]
 )]
 #[case::plain(
@@ -302,6 +368,10 @@ fn find_with_string_search_with_special_char_2(
     test_table![
         ["d"];
         ["\u{1b}[39ma\u{1b}[0m\u{1b}[41;39m{1}\u{1b}[0m\u{1b}[39mb\u{1b}[0m"],
+        [Value::test_string_with_highlights(
+            "a{1}b",
+            vec![ValueHighlight::new(1..4, Style::default().bold())],
+        )],
     ]
 )]
 #[case::plain(
@@ -321,7 +391,10 @@ fn find_with_string_search_with_special_char_3(
     "'['",
     test_table![
         ["d"];
-        ["\u{1b}[39ma\u{1b}[0m\u{1b}[41;39m[\u{1b}[0m\u{1b}[39m]b\u{1b}[0m"],
+        [Value::test_string_with_highlights(
+            "a[]b",
+            vec![ValueHighlight::new(1..2, Style::default().bold())],
+        )],
     ]
 )]
 #[case::plain(
@@ -341,7 +414,10 @@ fn find_with_string_search_with_special_char_4(
     "']'",
     test_table![
         ["d"];
-        ["\u{1b}[39ma[\u{1b}[0m\u{1b}[41;39m]\u{1b}[0m\u{1b}[39mb\u{1b}[0m"],
+        [Value::test_string_with_highlights(
+            "a[]b",
+            vec![ValueHighlight::new(2..3, Style::default().bold())],
+        )],
     ]
 )]
 #[case::plain(
@@ -361,7 +437,10 @@ fn find_with_string_search_with_special_char_5(
     "'[]'",
     test_table![
         ["d"];
-        ["\u{1b}[39ma\u{1b}[0m\u{1b}[41;39m[]\u{1b}[0m\u{1b}[39mb\u{1b}[0m"],
+        [Value::test_string_with_highlights(
+            "a[]b",
+            vec![ValueHighlight::new(1..3, Style::default().bold())],
+        )],
     ]
 )]
 #[case::plain(
@@ -389,12 +468,18 @@ fn find_and_highlight_in_nested_list() -> Result {
         .run(r#"[ [foo bar] [foo baz] ] | find "foo""#)
         .expect_value_eq(test_value!([
             [
-                "\u{1b}[39m\u{1b}[0m\u{1b}[41;39mfoo\u{1b}[0m\u{1b}[39m\u{1b}[0m",
-                "bar"
+                Value::test_string_with_highlights(
+                    "foo",
+                    vec![ValueHighlight::new(0..3, Style::default().bold())],
+                ),
+                Value::test_string("bar"),
             ],
             [
-                "\u{1b}[39m\u{1b}[0m\u{1b}[41;39mfoo\u{1b}[0m\u{1b}[39m\u{1b}[0m",
-                "baz"
+                Value::test_string_with_highlights(
+                    "foo",
+                    vec![ValueHighlight::new(0..3, Style::default().bold())],
+                ),
+                Value::test_string("baz"),
             ],
         ]))
 }
